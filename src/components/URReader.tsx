@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import QrScanner from 'qr-scanner'
-import { URDecoder, toHex } from 'foundation-ur-py'
+// import { URDecoder, toHex } from 'foundation-ur-py' // Will be used for full UR decoding
 
 export function URReader() {
   const [isScanning, setIsScanning] = useState(false)
