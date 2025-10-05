@@ -1,0 +1,28 @@
+{
+  "name": "psbt-utils",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "preact": "^10.27.2",
+    "foundation-ur-py": "https://github.com/ekrembal/foundation-ur-py.git",
+    "qrcode": "^1.5.3",
+    "qr-scanner": "^1.4.2"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/node": "^24.6.0",
+    "@types/qrcode": "^1.5.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "vite-plugin-singlefile": "^1.0.1"
+  }
+}
