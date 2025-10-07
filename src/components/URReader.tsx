@@ -36,7 +36,8 @@ export function URReader() {
       setDecodedData(null)
 
       // Check if QrScanner is supported
-      if (!QrScanner.hasCamera()) {
+      const hasCamera = await QrScanner.hasCamera()
+      if (!hasCamera) {
         console.log('❌ QrScanner.hasCamera() returned false')
         setCameraError('No camera found on this device')
         return
@@ -236,7 +237,7 @@ export function URReader() {
                 {availableCameras.map(cam => cam.label).join(', ')}
               </p>
               <p class="text-blue-600 text-xs mt-1">
-                QrScanner support: {QrScanner.hasCamera() ? 'Yes' : 'No'}
+                QrScanner support: {availableCameras.length > 0 ? 'Yes' : 'No'}
               </p>
             </div>
           )}

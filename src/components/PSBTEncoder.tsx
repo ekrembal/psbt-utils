@@ -2,7 +2,6 @@ import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
 import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
 import { Psbt } from 'bitcoinjs-lib'
-import { Buffer } from 'buffer'
 import { createHash } from 'crypto'
 
 export function PSBTEncoder() {
