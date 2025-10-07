@@ -152,8 +152,8 @@ export function URReader() {
       // Always display the QR code content
       setDecodedData(qrData)
       
-      // Check if it's a UR format and show appropriate message
-      if (!qrData.startsWith('ur:')) {
+      // Check if it's a UR format and show appropriate message (case-insensitive)
+      if (!qrData.toLowerCase().startsWith('ur:')) {
         setError('Not a valid UR format. QR code should start with "ur:"')
       } else {
         setError(null) // Clear any previous error for valid UR format
