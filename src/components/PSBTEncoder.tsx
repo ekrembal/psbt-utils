@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
 import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
+import { Psbt } from 'bitcoinjs-lib'
+import { Buffer } from 'buffer'
+import { createHash } from 'crypto'
 
 export function PSBTEncoder() {
   const [psbtInput, setPsbtInput] = useState('')
@@ -12,6 +15,7 @@ export function PSBTEncoder() {
   const [isAnimating, setIsAnimating] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState(1000) // milliseconds
   const [maxFragmentLen, setMaxFragmentLen] = useState(30)
+  const [decodedPsbt, setDecodedPsbt] = useState<any>(null)
 
   // Load PSBT from URL parameters on component mount
   useEffect(() => {
@@ -93,6 +97,9 @@ export function PSBTEncoder() {
       url.searchParams.set('tool', 'psbt-to-ur')
       url.searchParams.set('psbt', psbtData)
       window.history.replaceState({}, '', url.toString())
+
+      // Decode the PSBT for display
+      decodePSBT(psbtData)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -105,6 +112,42 @@ export function PSBTEncoder() {
     // Create PSBT object and get CBOR encoding
     const urPsbt = createPSBT(psbtBytes)
     return urPsbt.toCbor()
+  }
+
+  // Function to decode and display PSBT data
+  const decodePSBT = (psbtBase64: string) => {
+    try {
+      const psbt = Psbt.fromBase64(psbtBase64)
+      
+      // Calculate PSBT hash (SHA256 of the PSBT string)
+      const psbtHash = createHash('sha256').update(psbtBase64).digest('hex')
+      
+      const psbtData = {
+        version: psbt.version,
+        locktime: psbt.locktime,
+        inputCount: psbt.inputCount,
+        psbtHash: psbtHash,
+        raw: psbtBase64,
+        inputs: psbt.txInputs.map((input, index) => ({
+          inputIndex: index,
+          txid: input.hash.toString('hex'),
+          vout: input.index,
+          sequence: input.sequence,
+          type: psbt.getInputType(index),
+        })),
+        outputs: psbt.txOutputs.map((output, index) => ({
+          index,
+          value: output.value,
+          script: output.script.toString('hex'),
+        })),
+      }
+      
+      setDecodedPsbt(psbtData)
+      console.log('Decoded PSBT:', psbtData)
+    } catch (err) {
+      console.error('Error decoding PSBT:', err)
+      setError(`Error decoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
   }
 
   const encodePSBT = async () => {
@@ -176,6 +219,9 @@ export function PSBTEncoder() {
       url.searchParams.set('tool', 'psbt-to-ur')
       url.searchParams.set('psbt', psbtInput)
       window.history.replaceState({}, '', url.toString())
+
+      // Decode the PSBT for display
+      decodePSBT(psbtInput)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -257,6 +303,84 @@ export function PSBTEncoder() {
           </div>
         )}
       </div>
+
+      {/* PSBT Decoded Data Display */}
+      {decodedPsbt && (
+        <div class="bg-white shadow rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">PSBT Details</h3>
+          
+          {/* Transaction Info */}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-blue-50 p-4 rounded-lg">
+              <h4 class="font-medium text-blue-900 mb-2">Transaction Info</h4>
+              <div class="space-y-1 text-sm">
+                <div><span class="font-medium">Version:</span> {decodedPsbt.version}</div>
+                <div><span class="font-medium">Locktime:</span> {decodedPsbt.locktime}</div>
+                <div><span class="font-medium">Inputs:</span> {decodedPsbt.inputCount}</div>
+                <div><span class="font-medium">Outputs:</span> {decodedPsbt.outputs.length}</div>
+              </div>
+            </div>
+            
+            <div class="bg-purple-50 p-4 rounded-lg">
+              <h4 class="font-medium text-purple-900 mb-2">Raw Data</h4>
+              <div class="text-xs font-mono break-all text-gray-600">
+                {decodedPsbt.raw.substring(0, 50)}...
+              </div>
+            </div>
+          </div>
+
+          {/* Inputs */}
+          <div class="mb-6">
+            <h4 class="font-medium text-gray-900 mb-3">Inputs ({decodedPsbt.inputs.length})</h4>
+            <div class="space-y-3">
+              {decodedPsbt.inputs.map((input: any, index: number) => (
+                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Transaction ID (TXID)</div>
+                      <div class="text-xs font-mono text-gray-600 break-all">{input.txid}</div>
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Output Index (VOUT)</div>
+                      <div class="text-sm text-gray-600">{input.vout}</div>
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Sequence</div>
+                      <div class="text-sm text-gray-600">{input.sequence}</div>
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Type</div>
+                      <div class="text-sm text-gray-600">{input.type || 'Unknown'}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Outputs */}
+          <div>
+            <h4 class="font-medium text-gray-900 mb-3">Outputs ({decodedPsbt.outputs.length})</h4>
+            <div class="space-y-3">
+              {decodedPsbt.outputs.map((output: any, index: number) => (
+                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Amount</div>
+                      <div class="text-sm text-gray-600 font-mono">{(output.value / 100000000).toFixed(8)} BTC</div>
+                      <div class="text-xs text-gray-500">{output.value.toLocaleString()} sats</div>
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-700 mb-1">Output Script</div>
+                      <div class="text-xs font-mono text-gray-600 break-all">{output.script}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {encodedParts.length > 0 && (
         <div class="bg-white shadow rounded-lg p-6">
