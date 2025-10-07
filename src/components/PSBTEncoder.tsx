@@ -225,36 +225,19 @@ export function PSBTEncoder() {
             />
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
-                Max Fragment Length:
-              </label>
-              <input
-                id="maxFragmentLen"
-                type="number"
-                value={maxFragmentLen}
-                onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 30)}
-                min="10"
-                max="100"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="animationSpeed" class="block text-sm font-medium text-gray-700 mb-2">
-                Animation Speed (ms):
-              </label>
-              <input
-                id="animationSpeed"
-                type="number"
-                value={animationSpeed}
-                onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value) || 1000)}
-                min="100"
-                max="5000"
-                step="100"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+          <div>
+            <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
+              Max Fragment Length:
+            </label>
+            <input
+              id="maxFragmentLen"
+              type="number"
+              value={maxFragmentLen}
+              onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 30)}
+              min="10"
+              max="100"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
 
           <div class="flex space-x-4">
@@ -282,21 +265,38 @@ export function PSBTEncoder() {
               Encoded Parts ({encodedParts.length})
             </h3>
             {qrCodes.length > 1 && (
-              <div class="flex space-x-2">
-                <button
-                  onClick={startAnimation}
-                  disabled={isAnimating}
-                  class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                >
-                  Start Animation
-                </button>
-                <button
-                  onClick={stopAnimation}
-                  disabled={!isAnimating}
-                  class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
-                >
-                  Stop Animation
-                </button>
+              <div class="space-y-3">
+                <div class="flex space-x-2">
+                  <button
+                    onClick={startAnimation}
+                    disabled={isAnimating}
+                    class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    Start Animation
+                  </button>
+                  <button
+                    onClick={stopAnimation}
+                    disabled={!isAnimating}
+                    class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Stop Animation
+                  </button>
+                </div>
+                <div class="w-64">
+                  <label htmlFor="animationSpeedSlider" class="block text-sm font-medium text-gray-700 mb-2">
+                    Animation Speed: {animationSpeed}ms
+                  </label>
+                  <input
+                    id="animationSpeedSlider"
+                    type="range"
+                    min="100"
+                    max="1000"
+                    step="25"
+                    value={animationSpeed}
+                    onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value))}
+                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                </div>
               </div>
             )}
           </div>
