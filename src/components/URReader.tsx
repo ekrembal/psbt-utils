@@ -8,8 +8,23 @@ export function URReader() {
   const [error, setError] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
+  const [availableCameras, setAvailableCameras] = useState<QrScanner.Camera[]>([])
   const videoRef = useRef<HTMLVideoElement>(null)
   const qrScannerRef = useRef<QrScanner | null>(null)
+
+  // Get available cameras on component mount
+  useEffect(() => {
+    const getCameras = async () => {
+      try {
+        const cameras = await QrScanner.listCameras(true)
+        setAvailableCameras(cameras)
+        console.log('Available cameras:', cameras)
+      } catch (err) {
+        console.error('Error getting cameras:', err)
+      }
+    }
+    getCameras()
+  }, [])
 
   const startScanning = async () => {
     if (!videoRef.current) return
@@ -19,11 +34,53 @@ export function URReader() {
       setCameraError(null)
       setDecodedData(null)
 
-      // Check camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      setHasPermission(true)
-      stream.getTracks().forEach(track => track.stop()) // Stop the test stream
+      // Check if QrScanner is supported
+      if (!QrScanner.hasCamera()) {
+        setCameraError('No camera found on this device')
+        return
+      }
 
+      console.log('Available cameras:', availableCameras)
+
+      // Stop any existing scanner
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop()
+        qrScannerRef.current.destroy()
+        qrScannerRef.current = null
+      }
+
+      // Check camera permission first
+      try {
+        // Try environment camera first, fallback to any camera
+        let stream
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'environment' // Prefer back camera
+            } 
+          })
+        } catch (envErr) {
+          console.log('Environment camera failed, trying any camera:', envErr)
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true 
+          })
+        }
+        setHasPermission(true)
+        stream.getTracks().forEach(track => track.stop()) // Stop the test stream
+      } catch (permissionErr) {
+        console.error('Permission error:', permissionErr)
+        setCameraError('Camera permission denied. Please allow camera access and try again.')
+        setHasPermission(false)
+        return
+      }
+
+      // Ensure video element is ready
+      if (!videoRef.current) {
+        setCameraError('Video element not ready')
+        return
+      }
+
+      // Create QR scanner with better configuration
       qrScannerRef.current = new QrScanner(
         videoRef.current,
         (result) => {
@@ -33,14 +90,28 @@ export function URReader() {
         {
           highlightScanRegion: true,
           highlightCodeOutline: true,
+          preferredCamera: availableCameras.length > 0 ? availableCameras[0].id : 'environment',
+          maxScansPerSecond: 5,
         }
       )
 
-      await qrScannerRef.current.start()
-      setIsScanning(true)
+      console.log('Starting QR scanner...')
+      setIsScanning(true) // Set scanning state first so video element is visible
+      
+      // Small delay to ensure video element is rendered
+      setTimeout(async () => {
+        try {
+          await qrScannerRef.current?.start()
+          console.log('QR scanner started successfully')
+        } catch (startErr) {
+          console.error('Error starting scanner:', startErr)
+          setCameraError(`Failed to start camera: ${startErr instanceof Error ? startErr.message : 'Unknown error'}`)
+          setIsScanning(false)
+        }
+      }, 100)
     } catch (err) {
       console.error('Camera error:', err)
-      setCameraError(`Camera access denied or not available: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setCameraError(`Camera error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       setHasPermission(false)
     }
   }
@@ -133,6 +204,18 @@ export function URReader() {
           {cameraError && (
             <div class="p-4 bg-red-50 border border-red-200 rounded-md">
               <p class="text-red-800">{cameraError}</p>
+            </div>
+          )}
+
+          {availableCameras.length > 0 && (
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <p class="text-blue-800 text-sm">
+                Found {availableCameras.length} camera(s) available. 
+                {availableCameras.map(cam => cam.label).join(', ')}
+              </p>
+              <p class="text-blue-600 text-xs mt-1">
+                QrScanner support: {QrScanner.hasCamera() ? 'Yes' : 'No'}
+              </p>
             </div>
           )}
 

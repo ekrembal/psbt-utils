@@ -1,9 +1,37 @@
-import { useState } from 'preact/hooks'
+import { useState, useEffect } from 'preact/hooks'
 import { PSBTEncoder } from './components/PSBTEncoder'
 import { URReader } from './components/URReader'
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'psbt' | 'read'>('psbt')
+
+  // Initialize from URL parameters on component mount
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const tool = url.searchParams.get('tool')
+    
+    if (tool === 'read-ur') {
+      setActiveTab('read')
+    } else if (tool === 'psbt-to-ur') {
+      setActiveTab('psbt')
+    }
+    // If no tool parameter, keep default 'psbt'
+  }, [])
+
+  // Handle URL updates when switching tools
+  const handleTabChange = (tab: 'psbt' | 'read') => {
+    setActiveTab(tab)
+    
+    const url = new URL(window.location.href)
+    if (tab === 'read') {
+      // Remove PSBT parameter when switching to read-ur tool
+      url.searchParams.delete('psbt')
+      url.searchParams.set('tool', 'read-ur')
+    } else {
+      url.searchParams.set('tool', 'psbt-to-ur')
+    }
+    window.history.replaceState({}, '', url.toString())
+  }
 
   return (
     <div class="min-h-screen bg-gray-50">
@@ -22,7 +50,7 @@ export function App() {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="flex space-x-8">
             <button
-              onClick={() => setActiveTab('psbt')}
+              onClick={() => handleTabChange('psbt')}
               class={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'psbt'
                   ? 'border-blue-500 text-blue-600'
@@ -32,7 +60,7 @@ export function App() {
               PSBT to UR
             </button>
             <button
-              onClick={() => setActiveTab('read')}
+              onClick={() => handleTabChange('read')}
               class={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'read'
                   ? 'border-blue-500 text-blue-600'

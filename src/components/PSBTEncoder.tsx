@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
-import { UR, UREncoder, URDecoder, createPSBT, toHex } from 'foundation-ur-py'
+import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
 
 export function PSBTEncoder() {
   const [psbtInput, setPsbtInput] = useState('')
@@ -10,6 +10,95 @@ export function PSBTEncoder() {
   const [error, setError] = useState<string | null>(null)
   const [currentQrIndex, setCurrentQrIndex] = useState(0)
   const [isAnimating, setIsAnimating] = useState(false)
+  const [animationSpeed, setAnimationSpeed] = useState(1000) // milliseconds
+  const [maxFragmentLen, setMaxFragmentLen] = useState(30)
+
+  // Load PSBT from URL parameters on component mount
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const psbtFromUrl = url.searchParams.get('psbt')
+    if (psbtFromUrl) {
+      setPsbtInput(psbtFromUrl)
+      // Auto-encode if PSBT is provided in URL
+      setTimeout(() => {
+        autoEncodePSBT(psbtFromUrl)
+      }, 100)
+    }
+  }, [])
+
+  // Auto-encode function for URL-loaded PSBT
+  const autoEncodePSBT = async (psbtData: string) => {
+    if (!psbtData.trim()) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Validate Base64 string
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(psbtData)) {
+        throw new Error('Invalid Base64 string - must contain only A-Z, a-z, 0-9, +, /, and = characters')
+      }
+
+      // Convert Base64 string to bytes
+      const psbtBytes = new Uint8Array(atob(psbtData).split('').map(char => char.charCodeAt(0)))
+      
+      console.log(`✅ Parsed PSBT: ${psbtBytes.length} bytes`)
+      console.log(`✅ PSBT: ${toHex(psbtBytes)}`)
+
+      // Create PSBT CBOR encoding using the new PSBT class
+      const psbtCbor = createPsbtCbor(psbtBytes)
+      console.log(`✅ UR_PSBT: ${toHex(psbtCbor)}`)
+
+      // Create UR object with crypto-psbt type using the CBOR-encoded PSBT
+      const psbtUr = new UR("crypto-psbt", psbtCbor)
+
+      // Encode as multi-part UR with configurable max_fragment_len
+      const encoder = new UREncoder(psbtUr, maxFragmentLen, 0, 10)
+
+      console.log(`✅ Created UR2 encoder: ${encoder.fountainEncoder.seqLen()} parts`)
+      
+      const parts: string[] = []
+      // Display all parts (same approach as test_psbt.js)
+      for (let i = 0; i < encoder.fountainEncoder.seqLen(); i++) {
+        const part = await encoder.nextPart()
+        parts.push(part)
+        console.log(`   Part ${i+1}: ${part}`)
+      }
+
+      setEncodedParts(parts)
+
+      // Generate QR codes for all parts
+      const qrDataUrls: string[] = []
+      for (const part of parts) {
+        try {
+          const qrDataURL = await QRCode.toDataURL(part, {
+            width: 300,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          })
+          qrDataUrls.push(qrDataURL)
+        } catch (err) {
+          console.error('Error generating QR code:', err)
+        }
+      }
+
+      setQrCodes(qrDataUrls)
+      setCurrentQrIndex(0)
+
+      // Update URL with the encoded PSBT
+      const url = new URL(window.location.href)
+      url.searchParams.set('tool', 'psbt-to-ur')
+      url.searchParams.set('psbt', psbtData)
+      window.history.replaceState({}, '', url.toString())
+    } catch (err) {
+      setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Helper function to create PSBT CBOR encoding using the new PSBT class
   const createPsbtCbor = (psbtBytes: Uint8Array) => {
@@ -46,8 +135,8 @@ export function PSBTEncoder() {
       // Create UR object with crypto-psbt type using the CBOR-encoded PSBT
       const psbtUr = new UR("crypto-psbt", psbtCbor)
 
-      // Encode as multi-part UR with same parameters as test_psbt.js (max_fragment_len=30, min_fragment_len=10)
-      const encoder = new UREncoder(psbtUr, 30, 0, 10)
+      // Encode as multi-part UR with configurable max_fragment_len
+      const encoder = new UREncoder(psbtUr, maxFragmentLen, 0, 10)
 
       console.log(`✅ Created UR2 encoder: ${encoder.fountainEncoder.seqLen()} parts`)
       
@@ -81,6 +170,12 @@ export function PSBTEncoder() {
 
       setQrCodes(qrDataUrls)
       setCurrentQrIndex(0)
+
+      // Update URL with the encoded PSBT
+      const url = new URL(window.location.href)
+      url.searchParams.set('tool', 'psbt-to-ur')
+      url.searchParams.set('psbt', psbtInput)
+      window.history.replaceState({}, '', url.toString())
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -88,60 +183,17 @@ export function PSBTEncoder() {
     }
   }
 
-  const decodePSBT = async () => {
-    if (encodedParts.length === 0) {
-      setError('No encoded parts to decode')
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const decoder = new URDecoder()
-
-      // Process each part
-      for (const part of encodedParts) {
-        await decoder.receivePart(part)
-        if (decoder.isComplete()) {
-          break
-        }
-      }
-
-      if (decoder.isSuccess()) {
-        const decodedUr = decoder.resultMessage()
-        
-        // The decoded UR contains the CBOR-encoded PSBT data
-        const psbtCbor = decodedUr.cbor
-        console.log(`✅ Decoded UR_PSBT: ${toHex(psbtCbor)}`)
-        
-        // Convert CBOR back to PSBT bytes (the CBOR contains the raw PSBT data)
-        const psbtData = psbtCbor
-        const decodedBase64 = btoa(String.fromCharCode(...psbtData))
-        
-        console.log('✅ Decoded PSBT:', decodedBase64)
-        console.log(`✅ PSBT: ${toHex(psbtData)}`)
-        alert(`PSBT decoded successfully! Length: ${psbtData.length} bytes`)
-      } else {
-        throw new Error(`Decode failed: ${decoder.resultError()}`)
-      }
-    } catch (err) {
-      setError(`Error decoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Auto-animate QR codes
   useEffect(() => {
     if (qrCodes.length > 1 && isAnimating) {
       const interval = setInterval(() => {
         setCurrentQrIndex((prev) => (prev + 1) % qrCodes.length)
-      }, 1000) // Change QR code every second
+      }, animationSpeed) // Use configurable animation speed
 
       return () => clearInterval(interval)
     }
-  }, [qrCodes.length, isAnimating])
+  }, [qrCodes.length, isAnimating, animationSpeed])
 
   const startAnimation = () => {
     if (qrCodes.length > 1) {
@@ -173,6 +225,38 @@ export function PSBTEncoder() {
             />
           </div>
 
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
+                Max Fragment Length:
+              </label>
+              <input
+                id="maxFragmentLen"
+                type="number"
+                value={maxFragmentLen}
+                onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 30)}
+                min="10"
+                max="100"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="animationSpeed" class="block text-sm font-medium text-gray-700 mb-2">
+                Animation Speed (ms):
+              </label>
+              <input
+                id="animationSpeed"
+                type="number"
+                value={animationSpeed}
+                onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value) || 1000)}
+                min="100"
+                max="5000"
+                step="100"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
           <div class="flex space-x-4">
             <button 
               onClick={encodePSBT} 
@@ -180,14 +264,6 @@ export function PSBTEncoder() {
               class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Processing...' : 'Encode PSBT'}
-            </button>
-            
-            <button 
-              onClick={decodePSBT} 
-              disabled={loading || encodedParts.length === 0}
-              class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Decode PSBT
             </button>
           </div>
         </div>
