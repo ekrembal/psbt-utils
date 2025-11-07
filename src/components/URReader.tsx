@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import QrScanner from 'qr-scanner'
-// import { URDecoder, toHex } from 'foundation-ur-py' // Will be used for full UR decoding
+import { URDecoder } from 'foundation-ur-py'
+import { decode as cborDecode } from 'cbor-x'
+import { Psbt } from 'bitcoinjs-lib'
 
 export function URReader() {
   const [isScanning, setIsScanning] = useState(false)
@@ -9,8 +11,14 @@ export function URReader() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [availableCameras, setAvailableCameras] = useState<QrScanner.Camera[]>([])
+  const [progress, setProgress] = useState<number>(0)
+  const [partsCount, setPartsCount] = useState<number>(0)
+  const [isMultiPart, setIsMultiPart] = useState<boolean>(false)
+  
   const videoRef = useRef<HTMLVideoElement>(null)
   const qrScannerRef = useRef<QrScanner | null>(null)
+  const urDecoderRef = useRef<URDecoder | null>(null)
+  const scannedPartsRef = useRef<Set<string>>(new Set())
 
   // Get available cameras on component mount
   useEffect(() => {
@@ -34,6 +42,11 @@ export function URReader() {
       setError(null)
       setCameraError(null)
       setDecodedData(null)
+      setProgress(0)
+      setPartsCount(0)
+      setIsMultiPart(false)
+      urDecoderRef.current = null
+      scannedPartsRef.current.clear()
 
       // Check if QrScanner is supported
       const hasCamera = await QrScanner.hasCamera()
@@ -115,7 +128,7 @@ export function URReader() {
               highlightScanRegion: true,
               highlightCodeOutline: true,
               preferredCamera: availableCameras.length > 0 ? availableCameras[0].id : 'environment',
-              maxScansPerSecond: 5,
+              maxScansPerSecond: 10, // Increased for better animated QR code support
             }
           )
           console.log('✅ QrScanner created successfully')
@@ -143,24 +156,165 @@ export function URReader() {
       qrScannerRef.current = null
     }
     setIsScanning(false)
+    // Don't reset decoder and scanned parts here - they're needed for the results
   }
 
   const handleQRResult = async (qrData: string) => {
     try {
       setError(null)
       
-      // Always display the QR code content
-      setDecodedData(qrData)
+      console.log('QR Code detected:', qrData)
       
-      // Check if it's a UR format and show appropriate message (case-insensitive)
-      if (!qrData.toLowerCase().startsWith('ur:')) {
+      // Check if it's a UR format (case-insensitive)
+      if (!qrData.toUpperCase().startsWith('UR:')) {
         setError('Not a valid UR format. QR code should start with "ur:"')
-      } else {
-        setError(null) // Clear any previous error for valid UR format
+        return
       }
       
-      // Stop scanning after successful decode
-      stopScanning()
+      // Check if we've already scanned this exact part
+      if (scannedPartsRef.current.has(qrData)) {
+        console.log('🔄 Already scanned this part, skipping...')
+        return
+      }
+      
+      // Add to scanned parts
+      scannedPartsRef.current.add(qrData)
+      console.log(`✅ New part added. Total unique parts: ${scannedPartsRef.current.size}`)
+      
+      // Check if this is a multi-part UR (contains sequence info like /1-10/)
+      const isMultiPartUR = /\/\d+-\d+\//.test(qrData)
+      setIsMultiPart(isMultiPartUR)
+      
+      if (isMultiPartUR) {
+        // Handle multi-part UR decoding
+        if (!urDecoderRef.current) {
+          console.log('🔧 Initializing URDecoder...')
+          urDecoderRef.current = new URDecoder()
+        }
+        
+        try {
+          await urDecoderRef.current.receivePart(qrData)
+          const newPartsCount = scannedPartsRef.current.size
+          setPartsCount(newPartsCount)
+          
+          console.log(`🔄 UR2 Part received! (${newPartsCount} parts)`)
+          console.log(`🔍 Decoder state - isComplete: ${urDecoderRef.current.isComplete()}`)
+          
+          // Get progress from the decoder (if available)
+          let estimatedProgress = 0
+          try {
+            if (typeof urDecoderRef.current.estimatedPercentComplete === 'function') {
+              estimatedProgress = urDecoderRef.current.estimatedPercentComplete() * 100
+            } else {
+              // Fallback: calculate from sequence numbers
+              const match = qrData.match(/\/(\d+)-(\d+)\//)
+              if (match) {
+                const totalParts = parseInt(match[2], 10)
+                // Don't cap at 99% - let it reach 100% when decoder says it's complete
+                estimatedProgress = Math.min((newPartsCount / totalParts) * 100, 100)
+              }
+            }
+          } catch (err) {
+            console.warn('⚠️ Could not get progress estimate:', err)
+            // Fallback to simple calculation
+            const match = qrData.match(/\/(\d+)-(\d+)\//)
+            if (match) {
+              const totalParts = parseInt(match[2], 10)
+              estimatedProgress = Math.min((newPartsCount / totalParts) * 100, 100)
+            }
+          }
+          
+          setProgress(estimatedProgress)
+          console.log(`📊 Progress: ${estimatedProgress.toFixed(1)}% (${newPartsCount} unique parts)`)
+          
+          if (urDecoderRef.current.isComplete()) {
+            console.log('\n🎉 UR2 Decoding Complete!')
+            setProgress(100)
+            
+            if (urDecoderRef.current.isSuccess()) {
+              const result = urDecoderRef.current.resultMessage()
+              console.log(`✅ Decoded UR type: ${result.type}`)
+              
+              if (result.type === 'crypto-psbt') {
+                try {
+                  // Decode CBOR to extract the PSBT byte string
+                  console.log('🔍 Decoding CBOR...')
+                  const psbtBytes = cborDecode(result.cbor)
+                  console.log(`✅ Extracted PSBT bytes: ${psbtBytes.length} bytes`)
+                  
+                  // Convert to base64
+                  const psbtBase64 = Buffer.from(psbtBytes).toString('base64')
+                  console.log(`✅ PSBT base64: ${psbtBase64}`)
+                  
+                  // Validate with bitcoinjs-lib
+                  try {
+                    const psbt = Psbt.fromBase64(psbtBase64)
+                    console.log(`✅ PSBT validation successful!`)
+                    console.log(`   - Inputs: ${psbt.inputCount}`)
+                    console.log(`   - Outputs: ${psbt.txOutputs.length}`)
+                    
+                    // Display comprehensive PSBT information
+                    let displayText = `✅ Successfully decoded crypto-psbt!\n\n`
+                    displayText += `📊 PSBT Details:\n`
+                    displayText += `- Version: ${psbt.version}\n`
+                    displayText += `- Inputs: ${psbt.inputCount}\n`
+                    displayText += `- Outputs: ${psbt.txOutputs.length}\n`
+                    displayText += `- Locktime: ${psbt.locktime}\n\n`
+                    
+                    displayText += `📝 Inputs:\n`
+                    psbt.txInputs.forEach((input, idx) => {
+                      displayText += `  [${idx}] ${input.hash.reverse().toString('hex')}:${input.index}\n`
+                      displayText += `      Type: ${psbt.getInputType(idx) || 'unknown'}\n`
+                    })
+                    
+                    displayText += `\n💰 Outputs:\n`
+                    psbt.txOutputs.forEach((output, idx) => {
+                      displayText += `  [${idx}] ${output.value} sats\n`
+                      displayText += `      Script: ${output.script.toString('hex').substring(0, 40)}...\n`
+                    })
+                    
+                    displayText += `\n📄 PSBT Base64:\n${psbtBase64.substring(0, 100)}...`
+                    
+                    setDecodedData(displayText)
+                  } catch (psbtErr) {
+                    console.error('❌ PSBT validation failed:', psbtErr)
+                    setError(`PSBT validation failed: ${psbtErr instanceof Error ? psbtErr.message : 'Unknown error'}`)
+                    
+                    // Still show the data even if validation fails
+                    setDecodedData(`UR Type: ${result.type}\n\nPSBT Base64:\n${psbtBase64}\n\n⚠️ Validation failed: ${psbtErr instanceof Error ? psbtErr.message : 'Unknown error'}`)
+                  }
+                } catch (cborErr) {
+                  console.error('❌ CBOR decoding failed:', cborErr)
+                  setError(`CBOR decoding failed: ${cborErr instanceof Error ? cborErr.message : 'Unknown error'}`)
+                  
+                  // Fallback: show raw CBOR hex
+                  const hexData = Array.from(result.cbor)
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('')
+                  setDecodedData(`UR Type: ${result.type}\n\nCBOR Data (hex):\n${hexData}\n\n⚠️ CBOR decoding failed: ${cborErr instanceof Error ? cborErr.message : 'Unknown error'}`)
+                }
+              } else {
+                setDecodedData(`UR Type: ${result.type}\nCBOR Data: ${result.cbor.length} bytes`)
+              }
+              
+              // Stop scanning after successful decode
+              stopScanning()
+            } else {
+              const errorMsg = urDecoderRef.current.resultError()
+              setError(`Decoding failed: ${errorMsg}`)
+              stopScanning()
+            }
+          }
+        } catch (err) {
+          console.error('❌ Error processing UR part:', err)
+          setError(`Error processing UR part: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
+      } else {
+        // Single-part UR - just display it
+        setDecodedData(qrData)
+        setProgress(100)
+        stopScanning()
+      }
       
     } catch (err) {
       setError(`Error processing QR code: ${err instanceof Error ? err.message : 'Unknown error'}`)
@@ -170,6 +324,11 @@ export function URReader() {
   const clearResults = () => {
     setDecodedData(null)
     setError(null)
+    setProgress(0)
+    setPartsCount(0)
+    setIsMultiPart(false)
+    urDecoderRef.current = null
+    scannedPartsRef.current.clear()
   }
 
   // Cleanup on unmount
@@ -267,26 +426,67 @@ export function URReader() {
           <p class="text-center text-sm text-gray-600 mt-2">
             Point your camera at a QR code containing UR data
           </p>
+          
+          {/* Progress indicator for multi-part URs */}
+          {isMultiPart && (
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-medium text-blue-900">Multi-part UR Scanning</span>
+                <span class="text-sm font-semibold text-blue-700">{progress.toFixed(1)}%</span>
+              </div>
+              <div class="w-full bg-blue-200 rounded-full h-2.5">
+                <div 
+                  class="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+              <p class="text-xs text-blue-700 mt-2">
+                Unique parts scanned: {partsCount}
+              </p>
+              <p class="text-xs text-blue-600 mt-1">
+                Keep scanning until complete. Fountain codes may require more parts than the minimum.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Results */}
       {decodedData && (
         <div class="bg-white shadow rounded-lg p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">QR Code Content</h3>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            {decodedData.includes('Successfully decoded crypto-psbt') ? 'Decoded PSBT' : 'QR Code Content'}
+          </h3>
           <div class="bg-gray-50 rounded-lg p-4">
             <div class="mb-2">
-              <span class="text-sm font-medium text-gray-700">Content:</span>
+              <span class="text-sm font-medium text-gray-700">
+                {decodedData.includes('Successfully decoded crypto-psbt') ? 'PSBT Information:' : 'Content:'}
+              </span>
             </div>
-            <p class="text-sm text-gray-600 break-all font-mono bg-white p-3 rounded border">
+            <pre class="text-sm text-gray-600 whitespace-pre-wrap font-mono bg-white p-3 rounded border overflow-x-auto">
               {decodedData}
-            </p>
+            </pre>
           </div>
           
-          {decodedData.startsWith('ur:') ? (
+          {decodedData.includes('Successfully decoded crypto-psbt') ? (
             <div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-              <p class="text-green-800">
-                ✅ Valid UR format detected! This would typically be processed further to extract the actual PSBT or other data.
+              <p class="text-green-800 font-medium">
+                ✅ PSBT successfully decoded and validated!
+              </p>
+              <p class="text-green-700 text-sm mt-1">
+                The PSBT has been validated using bitcoinjs-lib and all checksums are correct.
+              </p>
+            </div>
+          ) : decodedData.includes('Validation failed') || decodedData.includes('decoding failed') ? (
+            <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p class="text-yellow-800">
+                ⚠️ Decoding completed but validation failed. Check the error message above.
+              </p>
+            </div>
+          ) : decodedData.startsWith('ur:') || decodedData.toUpperCase().startsWith('UR:') ? (
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <p class="text-blue-800">
+                ℹ️ Single-part UR detected. For multi-part URs, keep scanning until complete.
               </p>
             </div>
           ) : (
