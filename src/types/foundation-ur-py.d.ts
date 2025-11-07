@@ -21,6 +21,7 @@ declare module 'foundation-ur-py' {
     isSuccess(): boolean
     resultMessage(): UR
     resultError(): string
+    estimatedPercentComplete(): number
   }
 
   export function createPSBT(psbtBytes: Uint8Array): {
