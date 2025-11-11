@@ -168,6 +168,8 @@ export function URReader() {
       // Check if it's a UR format (case-insensitive)
       if (!qrData.toUpperCase().startsWith('UR:')) {
         setError('Not a valid UR format. QR code should start with "ur:"')
+        setDecodedData(qrData)
+        stopScanning()
         return
       }
       
