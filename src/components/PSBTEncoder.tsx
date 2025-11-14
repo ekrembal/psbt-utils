@@ -31,19 +31,21 @@ export function PSBTEncoder() {
 
   // Auto-encode function for URL-loaded PSBT
   const autoEncodePSBT = async (psbtData: string) => {
-    if (!psbtData.trim()) return
+    // Trim whitespace from input
+    const trimmedPsbt = psbtData.trim()
+    if (!trimmedPsbt) return
 
     setLoading(true)
     setError(null)
 
     try {
       // Validate Base64 string
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(psbtData)) {
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(trimmedPsbt)) {
         throw new Error('Invalid Base64 string - must contain only A-Z, a-z, 0-9, +, /, and = characters')
       }
 
       // Convert Base64 string to bytes
-      const psbtBytes = new Uint8Array(atob(psbtData).split('').map(char => char.charCodeAt(0)))
+      const psbtBytes = new Uint8Array(atob(trimmedPsbt).split('').map(char => char.charCodeAt(0)))
       
       console.log(`✅ Parsed PSBT: ${psbtBytes.length} bytes`)
       console.log(`✅ PSBT: ${toHex(psbtBytes)}`)
@@ -94,11 +96,11 @@ export function PSBTEncoder() {
       // Update URL with the encoded PSBT
       const url = new URL(window.location.href)
       url.searchParams.set('tool', 'psbt-to-ur')
-      url.searchParams.set('psbt', psbtData)
+      url.searchParams.set('psbt', trimmedPsbt)
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
-      decodePSBT(psbtData)
+      decodePSBT(trimmedPsbt)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -150,7 +152,9 @@ export function PSBTEncoder() {
   }
 
   const encodePSBT = async () => {
-    if (!psbtInput.trim()) {
+    // Trim whitespace from input
+    const trimmedPsbt = psbtInput.trim()
+    if (!trimmedPsbt) {
       setError('Please enter a PSBT Base64 string')
       return
     }
@@ -160,12 +164,12 @@ export function PSBTEncoder() {
 
     try {
       // Validate Base64 string
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(psbtInput)) {
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(trimmedPsbt)) {
         throw new Error('Invalid Base64 string - must contain only A-Z, a-z, 0-9, +, /, and = characters')
       }
 
       // Convert Base64 string to bytes
-      const psbtBytes = new Uint8Array(atob(psbtInput).split('').map(char => char.charCodeAt(0)))
+      const psbtBytes = new Uint8Array(atob(trimmedPsbt).split('').map(char => char.charCodeAt(0)))
       
       console.log(`✅ Parsed PSBT: ${psbtBytes.length} bytes`)
       console.log(`✅ PSBT: ${toHex(psbtBytes)}`)
@@ -216,11 +220,11 @@ export function PSBTEncoder() {
       // Update URL with the encoded PSBT
       const url = new URL(window.location.href)
       url.searchParams.set('tool', 'psbt-to-ur')
-      url.searchParams.set('psbt', psbtInput)
+      url.searchParams.set('psbt', trimmedPsbt)
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
-      decodePSBT(psbtInput)
+      decodePSBT(trimmedPsbt)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
