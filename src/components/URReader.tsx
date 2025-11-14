@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import QrScanner from 'qr-scanner'
-import { URDecoder } from 'foundation-ur-py'
-import { decode as cborDecode } from 'cbor-x'
+import { URDecoder, CBORDecoder } from 'foundation-ur-py'
 import { Psbt } from 'bitcoinjs-lib'
 
 export function URReader() {
@@ -231,6 +230,10 @@ export function URReader() {
           
           if (urDecoderRef.current.isComplete()) {
             console.log('\n🎉 UR2 Decoding Complete!')
+            console.log(`📊 Decoder stats:`)
+            console.log(`   - Expected parts: ${urDecoderRef.current.expectedPartCount()}`)
+            console.log(`   - Processed parts: ${urDecoderRef.current.processedPartsCount()}`)
+            console.log(`   - Received indexes: ${[...urDecoderRef.current.receivedPartIndexes()].sort((a,b) => a-b).slice(0, 10).join(', ')}...`)
             setProgress(100)
             
             if (urDecoderRef.current.isSuccess()) {
@@ -239,10 +242,20 @@ export function URReader() {
               
               if (result.type === 'crypto-psbt') {
                 try {
-                  // Decode CBOR to extract the PSBT byte string
+                  // Decode CBOR to extract the PSBT byte string (using library's CBORDecoder)
                   console.log('🔍 Decoding CBOR...')
-                  const psbtBytes = cborDecode(result.cbor)
+                  const cborDecoder = new CBORDecoder(result.cbor)
+                  const [psbtBytes, _] = cborDecoder.decodeBytes()
                   console.log(`✅ Extracted PSBT bytes: ${psbtBytes.length} bytes`)
+                  
+                  // Verify PSBT magic bytes
+                  const magic = Array.from(psbtBytes.slice(0, 5))
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('')
+                  console.log(`✅ PSBT magic bytes: ${magic}`)
+                  if (magic !== '70736274ff') {
+                    console.warn(`⚠️ Unexpected PSBT header: ${magic} (expected 70736274ff)`)
+                  }
                   
                   // Convert to base64
                   const psbtBase64 = Buffer.from(psbtBytes).toString('base64')
