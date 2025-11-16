@@ -75,8 +75,13 @@ export function App() {
 
       {/* Main Content */}
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'psbt' && <PSBTEncoder />}
-        {activeTab === 'read' && <URReader />}
+        {/* Keep both mounted to preserve state, just hide the inactive one */}
+        <div style={{ display: activeTab === 'psbt' ? 'block' : 'none' }}>
+          <PSBTEncoder />
+        </div>
+        <div style={{ display: activeTab === 'read' ? 'block' : 'none' }}>
+          <URReader />
+        </div>
       </main>
     </div>
   )
