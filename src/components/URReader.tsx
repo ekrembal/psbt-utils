@@ -345,13 +345,44 @@ export function URReader() {
     }
   }
 
-  const sharePsbt = () => {
-    if (decodedPsbt) {
-      const url = new URL(window.location.href)
-      url.searchParams.set('tool', 'psbt-to-ur')
-      url.searchParams.set('psbt', decodedPsbt)
-      window.location.href = url.toString()
+  const sharePsbt = async () => {
+    if (!decodedPsbt) return
+
+    const url = new URL(window.location.href)
+    url.searchParams.set('tool', 'psbt-to-ur')
+    url.searchParams.set('psbt', decodedPsbt)
+    const shareUrl = url.toString()
+
+    // Use native share API on mobile devices if available
+    if (navigator.share) {
+      try {
+        // Share with URL and PSBT text - some apps prefer text, others prefer URL
+        const shareData: ShareData = {
+          title: 'Bitcoin PSBT Transaction',
+          text: decodedPsbt, // Share the PSBT directly for easy copying
+        }
+        
+        // Try to share with URL if supported (some browsers/apps prefer this)
+        if (navigator.canShare && navigator.canShare({ url: shareUrl })) {
+          shareData.url = shareUrl
+        }
+        
+        await navigator.share(shareData)
+        return
+      } catch (err) {
+        // User cancelled or share failed, fall through to redirect
+        if (err instanceof Error && err.name !== 'AbortError') {
+          console.error('Share failed:', err)
+          // If share fails, still redirect as fallback
+          window.location.href = shareUrl
+        }
+        // If AbortError (user cancelled), do nothing
+        return
+      }
     }
+
+    // Fallback: redirect to PSBT encoder tab (desktop or no share API)
+    window.location.href = shareUrl
   }
 
   // Cleanup on unmount
