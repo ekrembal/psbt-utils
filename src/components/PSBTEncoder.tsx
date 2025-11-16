@@ -17,10 +17,14 @@ export function PSBTEncoder() {
   const [isTextareaCollapsed, setIsTextareaCollapsed] = useState(false)
   const [network, setNetwork] = useState<'bitcoin' | 'testnet4'>('bitcoin')
 
-  // Load PSBT from URL parameters on component mount
+  // Load PSBT and network from URL parameters on component mount
   useEffect(() => {
     const url = new URL(window.location.href)
     const psbtFromUrl = url.searchParams.get('psbt')
+    const networkFromUrl = url.searchParams.get('network')
+    if (networkFromUrl === 'testnet4' || networkFromUrl === 'bitcoin') {
+      setNetwork(networkFromUrl as 'bitcoin' | 'testnet4')
+    }
     if (psbtFromUrl) {
       setPsbtInput(psbtFromUrl)
       // Auto-encode if PSBT is provided in URL
@@ -94,10 +98,11 @@ export function PSBTEncoder() {
       setQrCodes(qrDataUrls)
       setCurrentQrIndex(0)
 
-      // Update URL with the encoded PSBT
+      // Update URL with the encoded PSBT and network
       const url = new URL(window.location.href)
       url.searchParams.set('tool', 'psbt-to-ur')
       url.searchParams.set('psbt', trimmedPsbt)
+      url.searchParams.set('network', network)
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
@@ -231,10 +236,11 @@ export function PSBTEncoder() {
       setQrCodes(qrDataUrls)
       setCurrentQrIndex(0)
 
-      // Update URL with the encoded PSBT
+      // Update URL with the encoded PSBT and network
       const url = new URL(window.location.href)
       url.searchParams.set('tool', 'psbt-to-ur')
       url.searchParams.set('psbt', trimmedPsbt)
+      url.searchParams.set('network', network)
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
@@ -271,27 +277,29 @@ export function PSBTEncoder() {
   return (
     <div class="space-y-6">
       <div class="bg-white shadow rounded-lg p-6">
-        <h2 class="text-xl font-semibold text-gray-900 mb-4">PSBT to UR Encoder</h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold text-gray-900">PSBT to UR Encoder</h2>
+          {decodedPsbt?.psbtHash && (
+            <button
+              onClick={() => setIsTextareaCollapsed(!isTextareaCollapsed)}
+              class="text-sm text-blue-600 hover:text-blue-800"
+            >
+              {isTextareaCollapsed ? 'Expand' : 'Collapse'}
+            </button>
+          )}
+        </div>
         
-        <div class="space-y-4">
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label htmlFor="psbtInput" class="block text-sm font-medium text-gray-700">
+        {isTextareaCollapsed && decodedPsbt?.psbtHash ? (
+          <div class="text-xs text-gray-500 space-y-1">
+            <div><span class="font-medium">Network:</span> {network === 'testnet4' ? 'Testnet4' : 'Bitcoin'}</div>
+            <div><span class="font-medium">PSBT Hash:</span> <span class="font-mono">{decodedPsbt.psbtHash}</span></div>
+          </div>
+        ) : (
+          <div class="space-y-4">
+            <div>
+              <label htmlFor="psbtInput" class="block text-sm font-medium text-gray-700 mb-2">
                 PSBT Base64 String:
               </label>
-              <button
-                onClick={() => setIsTextareaCollapsed(!isTextareaCollapsed)}
-                class="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {isTextareaCollapsed ? 'Expand' : 'Collapse'}
-              </button>
-            </div>
-            {isTextareaCollapsed && decodedPsbt?.psbtHash ? (
-              <div class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg bg-gray-50">
-                <div class="text-sm font-medium text-gray-700 mb-1">PSBT Hash (SHA256):</div>
-                <div class="text-xs font-mono text-gray-600 break-all">{decodedPsbt.psbtHash}</div>
-              </div>
-            ) : (
               <textarea
                 id="psbtInput"
                 value={psbtInput}
@@ -301,52 +309,59 @@ export function PSBTEncoder() {
                 class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-y min-h-[300px]"
                 style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace' }}
               />
-            )}
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
-                Max Fragment Length:
-              </label>
-              <input
-                id="maxFragmentLen"
-                type="number"
-                value={maxFragmentLen}
-                onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 100)}
-                min="10"
-                max="200"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
             </div>
-            <div>
-              <label htmlFor="networkSelect" class="block text-sm font-medium text-gray-700 mb-2">
-                Network:
-              </label>
-              <select
-                id="networkSelect"
-                value={network}
-                onChange={(e) => setNetwork((e.target as HTMLSelectElement).value as 'bitcoin' | 'testnet4')}
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
+                  Max Fragment Length:
+                </label>
+                <input
+                  id="maxFragmentLen"
+                  type="number"
+                  value={maxFragmentLen}
+                  onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 100)}
+                  min="10"
+                  max="200"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="networkSelect" class="block text-sm font-medium text-gray-700 mb-2">
+                  Network:
+                </label>
+                <select
+                  id="networkSelect"
+                  value={network}
+                  onChange={(e) => {
+                    const newNetwork = (e.target as HTMLSelectElement).value as 'bitcoin' | 'testnet4'
+                    setNetwork(newNetwork)
+                    // Update URL with new network
+                    const url = new URL(window.location.href)
+                    url.searchParams.set('network', newNetwork)
+                    window.history.replaceState({}, '', url.toString())
+                  }}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="bitcoin">Bitcoin</option>
+                  <option value="testnet4">Testnet4</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="flex space-x-4">
+              <button 
+                onClick={encodePSBT} 
+                disabled={loading}
+                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="bitcoin">Bitcoin</option>
-                <option value="testnet4">Testnet4</option>
-              </select>
+                {loading ? 'Processing...' : 'Encode PSBT'}
+              </button>
             </div>
           </div>
+        )}
 
-          <div class="flex space-x-4">
-            <button 
-              onClick={encodePSBT} 
-              disabled={loading}
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Processing...' : 'Encode PSBT'}
-            </button>
-          </div>
-        </div>
-
-        {error && (
+        {error && !isTextareaCollapsed && (
           <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
             <p class="text-red-800">{error}</p>
           </div>

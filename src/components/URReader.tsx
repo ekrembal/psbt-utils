@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import QrScanner from 'qr-scanner'
 import { URDecoder, CBORDecoder } from 'foundation-ur-py'
-import { Psbt } from 'bitcoinjs-lib'
 
 export function URReader() {
   const [isScanning, setIsScanning] = useState(false)
   const [decodedData, setDecodedData] = useState<string | null>(null)
+  const [decodedPsbt, setDecodedPsbt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
@@ -273,43 +273,9 @@ export function URReader() {
                   const psbtBase64 = Buffer.from(psbtBytes).toString('base64')
                   console.log(`✅ PSBT base64: ${psbtBase64}`)
                   
-                  // Validate with bitcoinjs-lib
-                  try {
-                    const psbt = Psbt.fromBase64(psbtBase64)
-                    console.log(`✅ PSBT validation successful!`)
-                    console.log(`   - Inputs: ${psbt.inputCount}`)
-                    console.log(`   - Outputs: ${psbt.txOutputs.length}`)
-                    
-                    // Display comprehensive PSBT information
-                    let displayText = `✅ Successfully decoded crypto-psbt!\n\n`
-                    displayText += `📊 PSBT Details:\n`
-                    displayText += `- Version: ${psbt.version}\n`
-                    displayText += `- Inputs: ${psbt.inputCount}\n`
-                    displayText += `- Outputs: ${psbt.txOutputs.length}\n`
-                    displayText += `- Locktime: ${psbt.locktime}\n\n`
-                    
-                    displayText += `📝 Inputs:\n`
-                    psbt.txInputs.forEach((input, idx) => {
-                      displayText += `  [${idx}] ${input.hash.reverse().toString('hex')}:${input.index}\n`
-                      displayText += `      Type: ${psbt.getInputType(idx) || 'unknown'}\n`
-                    })
-                    
-                    displayText += `\n💰 Outputs:\n`
-                    psbt.txOutputs.forEach((output, idx) => {
-                      displayText += `  [${idx}] ${output.value} sats\n`
-                      displayText += `      Script: ${output.script.toString('hex').substring(0, 40)}...\n`
-                    })
-                    
-                    displayText += `\n📄 PSBT Base64:\n${psbtBase64.substring(0, 100)}...`
-                    
-                    setDecodedData(displayText)
-                  } catch (psbtErr) {
-                    console.error('❌ PSBT validation failed:', psbtErr)
-                    setError(`PSBT validation failed: ${psbtErr instanceof Error ? psbtErr.message : 'Unknown error'}`)
-                    
-                    // Still show the data even if validation fails
-                    setDecodedData(`UR Type: ${result.type}\n\nPSBT Base64:\n${psbtBase64}\n\n⚠️ Validation failed: ${psbtErr instanceof Error ? psbtErr.message : 'Unknown error'}`)
-                  }
+                  // Just store the PSBT, don't parse it
+                  setDecodedPsbt(psbtBase64)
+                  setDecodedData(null)
                 } catch (cborErr) {
                   console.error('❌ CBOR decoding failed:', cborErr)
                   setError(`CBOR decoding failed: ${cborErr instanceof Error ? cborErr.message : 'Unknown error'}`)
@@ -350,12 +316,42 @@ export function URReader() {
 
   const clearResults = () => {
     setDecodedData(null)
+    setDecodedPsbt(null)
     setError(null)
     setProgress(0)
     setPartsCount(0)
     setIsMultiPart(false)
     urDecoderRef.current = null
     scannedPartsRef.current.clear()
+  }
+
+  const copyPsbt = async () => {
+    if (decodedPsbt) {
+      try {
+        await navigator.clipboard.writeText(decodedPsbt)
+        // Show temporary feedback
+        const button = document.getElementById('copy-psbt-btn')
+        if (button) {
+          const originalText = button.textContent
+          button.textContent = 'Copied!'
+          setTimeout(() => {
+            if (button) button.textContent = originalText
+          }, 2000)
+        }
+      } catch (err) {
+        console.error('Failed to copy:', err)
+        setError('Failed to copy PSBT to clipboard')
+      }
+    }
+  }
+
+  const sharePsbt = () => {
+    if (decodedPsbt) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tool', 'psbt-to-ur')
+      url.searchParams.set('psbt', decodedPsbt)
+      window.location.href = url.toString()
+    }
   }
 
   // Cleanup on unmount
@@ -430,7 +426,7 @@ export function URReader() {
 
             <button 
               onClick={clearResults} 
-              disabled={!decodedData && !error}
+              disabled={!decodedData && !decodedPsbt && !error}
               class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Clear Results
@@ -502,39 +498,63 @@ export function URReader() {
         </div>
       )}
 
-      {/* Results */}
-      {decodedData && (
+      {/* PSBT Results */}
+      {decodedPsbt && (
         <div class="bg-white shadow rounded-lg p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">
-            {decodedData.includes('Successfully decoded crypto-psbt') ? 'Decoded PSBT' : 'QR Code Content'}
-          </h3>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Decoded PSBT</h3>
+          <div class="bg-gray-50 rounded-lg p-4 mb-4">
+            <div class="mb-2">
+              <span class="text-sm font-medium text-gray-700">PSBT Base64:</span>
+            </div>
+            <textarea
+              readOnly
+              value={decodedPsbt}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md bg-white font-mono text-xs resize-y min-h-[200px]"
+              style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace' }}
+            />
+          </div>
+          
+          <div class="flex space-x-4">
+            <button
+              id="copy-psbt-btn"
+              onClick={copyPsbt}
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Copy PSBT
+            </button>
+            <button
+              onClick={sharePsbt}
+              class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            >
+              Share PSBT
+            </button>
+          </div>
+          
+          <div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+            <p class="text-green-800 font-medium">
+              ✅ PSBT successfully decoded from UR format!
+            </p>
+            <p class="text-green-700 text-sm mt-1">
+              Use the buttons above to copy or share the PSBT.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Other Results */}
+      {decodedData && !decodedPsbt && (
+        <div class="bg-white shadow rounded-lg p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">QR Code Content</h3>
           <div class="bg-gray-50 rounded-lg p-4">
             <div class="mb-2">
-              <span class="text-sm font-medium text-gray-700">
-                {decodedData.includes('Successfully decoded crypto-psbt') ? 'PSBT Information:' : 'Content:'}
-              </span>
+              <span class="text-sm font-medium text-gray-700">Content:</span>
             </div>
             <pre class="text-sm text-gray-600 whitespace-pre-wrap font-mono bg-white p-3 rounded border overflow-x-auto">
               {decodedData}
             </pre>
           </div>
           
-          {decodedData.includes('Successfully decoded crypto-psbt') ? (
-            <div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-              <p class="text-green-800 font-medium">
-                ✅ PSBT successfully decoded and validated!
-              </p>
-              <p class="text-green-700 text-sm mt-1">
-                The PSBT has been validated using bitcoinjs-lib and all checksums are correct.
-              </p>
-            </div>
-          ) : decodedData.includes('Validation failed') || decodedData.includes('decoding failed') ? (
-            <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p class="text-yellow-800">
-                ⚠️ Decoding completed but validation failed. Check the error message above.
-              </p>
-            </div>
-          ) : decodedData.startsWith('ur:') || decodedData.toUpperCase().startsWith('UR:') ? (
+          {decodedData.startsWith('ur:') || decodedData.toUpperCase().startsWith('UR:') ? (
             <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
               <p class="text-blue-800">
                 ℹ️ Single-part UR detected. For multi-part URs, keep scanning until complete.
