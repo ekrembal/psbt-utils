@@ -356,18 +356,11 @@ export function URReader() {
     // Use native share API on mobile devices if available
     if (navigator.share) {
       try {
-        // Share with URL and PSBT text - some apps prefer text, others prefer URL
-        const shareData: ShareData = {
+        // Share only the PSBT text (no URL to keep it short)
+        await navigator.share({
           title: 'Bitcoin PSBT Transaction',
           text: decodedPsbt, // Share the PSBT directly for easy copying
-        }
-        
-        // Try to share with URL if supported (some browsers/apps prefer this)
-        if (navigator.canShare && navigator.canShare({ url: shareUrl })) {
-          shareData.url = shareUrl
-        }
-        
-        await navigator.share(shareData)
+        })
         return
       } catch (err) {
         // User cancelled or share failed, fall through to redirect
