@@ -15,16 +15,24 @@ export function PSBTEncoder() {
   const [maxFragmentLen, setMaxFragmentLen] = useState(100)
   const [decodedPsbt, setDecodedPsbt] = useState<any>(null)
   const [isTextareaCollapsed, setIsTextareaCollapsed] = useState(false)
-  const [network, setNetwork] = useState<'bitcoin' | 'testnet4'>('bitcoin')
+  
+  // Initialize network from URL on first render
+  const getInitialNetwork = (): 'bitcoin' | 'testnet4' => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      const networkFromUrl = url.searchParams.get('network')
+      if (networkFromUrl === 'testnet4' || networkFromUrl === 'bitcoin') {
+        return networkFromUrl as 'bitcoin' | 'testnet4'
+      }
+    }
+    return 'bitcoin'
+  }
+  const [network, setNetwork] = useState<'bitcoin' | 'testnet4'>(getInitialNetwork())
 
-  // Load PSBT and network from URL parameters on component mount
+  // Load PSBT from URL parameters on component mount
   useEffect(() => {
     const url = new URL(window.location.href)
     const psbtFromUrl = url.searchParams.get('psbt')
-    const networkFromUrl = url.searchParams.get('network')
-    if (networkFromUrl === 'testnet4' || networkFromUrl === 'bitcoin') {
-      setNetwork(networkFromUrl as 'bitcoin' | 'testnet4')
-    }
     if (psbtFromUrl) {
       setPsbtInput(psbtFromUrl)
       // Auto-encode if PSBT is provided in URL
