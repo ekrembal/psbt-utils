@@ -2,7 +2,6 @@ import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
 import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
 import { Psbt } from 'bitcoinjs-lib'
-import { createHash } from 'crypto'
 
 export function PSBTEncoder() {
   const [psbtInput, setPsbtInput] = useState('')
@@ -12,9 +11,11 @@ export function PSBTEncoder() {
   const [error, setError] = useState<string | null>(null)
   const [currentQrIndex, setCurrentQrIndex] = useState(0)
   const [isAnimating, setIsAnimating] = useState(false)
-  const [animationSpeed, setAnimationSpeed] = useState(1000) // milliseconds
+  const [animationSpeed, setAnimationSpeed] = useState(250) // milliseconds
   const [maxFragmentLen, setMaxFragmentLen] = useState(100)
   const [decodedPsbt, setDecodedPsbt] = useState<any>(null)
+  const [isTextareaCollapsed, setIsTextareaCollapsed] = useState(false)
+  const [network, setNetwork] = useState<'bitcoin' | 'testnet4'>('bitcoin')
 
   // Load PSBT from URL parameters on component mount
   useEffect(() => {
@@ -100,7 +101,7 @@ export function PSBTEncoder() {
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
-      decodePSBT(trimmedPsbt)
+      await decodePSBT(trimmedPsbt)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -115,20 +116,33 @@ export function PSBTEncoder() {
     return urPsbt.toCbor()
   }
 
+  // Helper function to calculate SHA256 hash using Web Crypto API
+  const calculateSHA256 = async (text: string): Promise<string> => {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(text)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+
   // Function to decode and display PSBT data
-  const decodePSBT = (psbtBase64: string) => {
+  const decodePSBT = async (psbtBase64: string) => {
     try {
       const psbt = Psbt.fromBase64(psbtBase64)
       
       // Calculate PSBT hash (SHA256 of the PSBT string)
-      const psbtHash = createHash('sha256').update(psbtBase64).digest('hex')
+      const psbtHash = await calculateSHA256(psbtBase64)
+      
+      // Convert PSBT to hex for mempool.space preview
+      const psbtBytes = new Uint8Array(atob(psbtBase64).split('').map(char => char.charCodeAt(0)))
+      const psbtHex = Array.from(psbtBytes).map(b => b.toString(16).padStart(2, '0')).join('')
       
       const psbtData = {
         version: psbt.version,
         locktime: psbt.locktime,
         inputCount: psbt.inputCount,
         psbtHash: psbtHash,
-        raw: psbtBase64,
+        psbtHex: psbtHex,
         inputs: psbt.txInputs.map((input, index) => ({
           inputIndex: index,
           txid: input.hash.toString('hex'),
@@ -224,7 +238,7 @@ export function PSBTEncoder() {
       window.history.replaceState({}, '', url.toString())
 
       // Decode the PSBT for display
-      decodePSBT(trimmedPsbt)
+      await decodePSBT(trimmedPsbt)
     } catch (err) {
       setError(`Error encoding PSBT: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -261,33 +275,64 @@ export function PSBTEncoder() {
         
         <div class="space-y-4">
           <div>
-            <label htmlFor="psbtInput" class="block text-sm font-medium text-gray-700 mb-2">
-              PSBT Base64 String:
-            </label>
-            <textarea
-              id="psbtInput"
-              value={psbtInput}
-              onInput={(e) => setPsbtInput((e.target as HTMLTextAreaElement).value)}
-              placeholder="Enter PSBT Base64 string"
-              rows={12}
-              class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-y min-h-[300px]"
-              style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace' }}
-            />
+            <div class="flex items-center justify-between mb-2">
+              <label htmlFor="psbtInput" class="block text-sm font-medium text-gray-700">
+                PSBT Base64 String:
+              </label>
+              <button
+                onClick={() => setIsTextareaCollapsed(!isTextareaCollapsed)}
+                class="text-sm text-blue-600 hover:text-blue-800"
+              >
+                {isTextareaCollapsed ? 'Expand' : 'Collapse'}
+              </button>
+            </div>
+            {isTextareaCollapsed && decodedPsbt?.psbtHash ? (
+              <div class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg bg-gray-50">
+                <div class="text-sm font-medium text-gray-700 mb-1">PSBT Hash (SHA256):</div>
+                <div class="text-xs font-mono text-gray-600 break-all">{decodedPsbt.psbtHash}</div>
+              </div>
+            ) : (
+              <textarea
+                id="psbtInput"
+                value={psbtInput}
+                onInput={(e) => setPsbtInput((e.target as HTMLTextAreaElement).value)}
+                placeholder="Enter PSBT Base64 string"
+                rows={12}
+                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-y min-h-[300px]"
+                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace' }}
+              />
+            )}
           </div>
 
-          <div>
-            <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
-              Max Fragment Length:
-            </label>
-            <input
-              id="maxFragmentLen"
-              type="number"
-              value={maxFragmentLen}
-              onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 100)}
-              min="10"
-              max="200"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="maxFragmentLen" class="block text-sm font-medium text-gray-700 mb-2">
+                Max Fragment Length:
+              </label>
+              <input
+                id="maxFragmentLen"
+                type="number"
+                value={maxFragmentLen}
+                onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 100)}
+                min="10"
+                max="200"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="networkSelect" class="block text-sm font-medium text-gray-700 mb-2">
+                Network:
+              </label>
+              <select
+                id="networkSelect"
+                value={network}
+                onChange={(e) => setNetwork((e.target as HTMLSelectElement).value as 'bitcoin' | 'testnet4')}
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="bitcoin">Bitcoin</option>
+                <option value="testnet4">Testnet4</option>
+              </select>
+            </div>
           </div>
 
           <div class="flex space-x-4">
@@ -322,14 +367,27 @@ export function PSBTEncoder() {
                 <div><span class="font-medium">Locktime:</span> {decodedPsbt.locktime}</div>
                 <div><span class="font-medium">Inputs:</span> {decodedPsbt.inputCount}</div>
                 <div><span class="font-medium">Outputs:</span> {decodedPsbt.outputs.length}</div>
+                <div><span class="font-medium">PSBT Hash:</span> <span class="font-mono text-xs">{decodedPsbt.psbtHash}</span></div>
               </div>
             </div>
             
-            <div class="bg-purple-50 p-4 rounded-lg">
-              <h4 class="font-medium text-purple-900 mb-2">Raw Data</h4>
-              <div class="text-xs font-mono break-all text-gray-600">
-                {decodedPsbt.raw.substring(0, 50)}...
-              </div>
+            <div class="bg-green-50 p-4 rounded-lg">
+              <h4 class="font-medium text-green-900 mb-2">Preview</h4>
+              {decodedPsbt.psbtHex && (
+                <div class="space-y-2">
+                  <a
+                    href={`https://mempool.space${network === 'testnet4' ? '/testnet4' : ''}/tx/preview#tx=${decodedPsbt.psbtHex}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-sm text-blue-600 hover:text-blue-800 hover:underline break-all block"
+                  >
+                    View on Mempool.space →
+                  </a>
+                  <div class="text-xs text-gray-600 font-mono break-all">
+                    {network === 'testnet4' ? 'https://mempool.space/testnet4' : 'https://mempool.space'}/tx/preview#tx={decodedPsbt.psbtHex.substring(0, 20)}...
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
