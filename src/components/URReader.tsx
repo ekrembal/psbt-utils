@@ -10,6 +10,7 @@ export function URReader() {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [availableCameras, setAvailableCameras] = useState<QrScanner.Camera[]>([])
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number>(0)
   const [partsCount, setPartsCount] = useState<number>(0)
   const [isMultiPart, setIsMultiPart] = useState<boolean>(false)
@@ -25,9 +26,17 @@ export function URReader() {
       try {
         const cameras = await QrScanner.listCameras(true)
         setAvailableCameras(cameras)
+        // Set default camera to first available camera or environment camera
+        if (cameras.length > 0) {
+          setSelectedCameraId(cameras[0].id)
+        } else {
+          setSelectedCameraId('environment')
+        }
         console.log('Available cameras:', cameras)
       } catch (err) {
         console.error('Error getting cameras:', err)
+        // Fallback to environment camera
+        setSelectedCameraId('environment')
       }
     }
     getCameras()
@@ -115,7 +124,10 @@ export function URReader() {
         try {
           // Create QR scanner with better configuration
           console.log('🔧 Creating QrScanner...')
-          console.log('Using camera ID:', availableCameras.length > 0 ? availableCameras[0].id : 'environment')
+          
+          // Determine which camera to use
+          const cameraToUse = selectedCameraId || (availableCameras.length > 0 ? availableCameras[0].id : 'environment')
+          console.log('Using camera ID:', cameraToUse)
           
           qrScannerRef.current = new QrScanner(
             videoRef.current,
@@ -126,7 +138,7 @@ export function URReader() {
             {
               highlightScanRegion: true,
               highlightCodeOutline: true,
-              preferredCamera: availableCameras.length > 0 ? availableCameras[0].id : 'environment',
+              preferredCamera: cameraToUse,
               maxScansPerSecond: 10, // Increased for better animated QR code support
             }
           )
@@ -361,6 +373,41 @@ export function URReader() {
         <h2 class="text-xl font-semibold text-gray-900 mb-4">Read UR from QR Code</h2>
         
         <div class="space-y-4">
+          {/* Camera Selection */}
+          <div>
+            <label htmlFor="cameraSelect" class="block text-sm font-medium text-gray-700 mb-2">
+              Select Camera:
+            </label>
+            <select
+              id="cameraSelect"
+              value={selectedCameraId || 'environment'}
+              onChange={(e) => {
+                const newCameraId = (e.target as HTMLSelectElement).value
+                setSelectedCameraId(newCameraId)
+                // If scanner is running, restart with new camera
+                if (isScanning && qrScannerRef.current) {
+                  stopScanning()
+                  setTimeout(() => startScanning(), 100)
+                }
+              }}
+              disabled={isScanning}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {availableCameras.map((camera) => (
+                <option key={camera.id} value={camera.id}>
+                  {camera.label || `Camera ${camera.id}`}
+                </option>
+              ))}
+              <option value="environment">Environment (Back Camera)</option>
+              <option value="user">User (Front Camera)</option>
+            </select>
+            {availableCameras.length === 0 && (
+              <p class="mt-1 text-xs text-gray-500">
+                No specific cameras detected. Using default camera options.
+              </p>
+            )}
+          </div>
+
           <div class="flex space-x-4">
             <button 
               onClick={() => {
@@ -404,17 +451,6 @@ export function URReader() {
             </div>
           )}
 
-          {availableCameras.length > 0 && (
-            <div class="p-4 bg-blue-50 border border-blue-200 rounded-md">
-              <p class="text-blue-800 text-sm">
-                Found {availableCameras.length} camera(s) available. 
-                {availableCameras.map(cam => cam.label).join(', ')}
-              </p>
-              <p class="text-blue-600 text-xs mt-1">
-                QrScanner support: {availableCameras.length > 0 ? 'Yes' : 'No'}
-              </p>
-            </div>
-          )}
 
           {error && (
             <div class="p-4 bg-red-50 border border-red-200 rounded-md">

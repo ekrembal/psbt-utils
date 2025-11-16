@@ -13,7 +13,7 @@ export function PSBTEncoder() {
   const [currentQrIndex, setCurrentQrIndex] = useState(0)
   const [isAnimating, setIsAnimating] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState(1000) // milliseconds
-  const [maxFragmentLen, setMaxFragmentLen] = useState(30)
+  const [maxFragmentLen, setMaxFragmentLen] = useState(100)
   const [decodedPsbt, setDecodedPsbt] = useState<any>(null)
 
   // Load PSBT from URL parameters on component mount
@@ -269,8 +269,9 @@ export function PSBTEncoder() {
               value={psbtInput}
               onInput={(e) => setPsbtInput((e.target as HTMLTextAreaElement).value)}
               placeholder="Enter PSBT Base64 string"
-              rows={4}
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              rows={12}
+              class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-y min-h-[300px]"
+              style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace' }}
             />
           </div>
 
@@ -282,9 +283,9 @@ export function PSBTEncoder() {
               id="maxFragmentLen"
               type="number"
               value={maxFragmentLen}
-              onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 30)}
+              onInput={(e) => setMaxFragmentLen(parseInt((e.target as HTMLInputElement).value) || 100)}
               min="10"
-              max="100"
+              max="200"
               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
