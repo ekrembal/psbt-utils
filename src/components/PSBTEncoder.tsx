@@ -476,46 +476,9 @@ export function PSBTEncoder() {
 
       {encodedParts.length > 0 && (
         <div class="bg-white shadow rounded-lg p-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">
-              Encoded Parts ({encodedParts.length})
-            </h3>
-            {qrCodes.length > 1 && (
-              <div class="space-y-3">
-                <div class="flex space-x-2">
-                  <button
-                    onClick={startAnimation}
-                    disabled={isAnimating}
-                    class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    Start Animation
-                  </button>
-                  <button
-                    onClick={stopAnimation}
-                    disabled={!isAnimating}
-                    class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    Stop Animation
-                  </button>
-                </div>
-                <div class="w-64">
-                  <label htmlFor="animationSpeedSlider" class="block text-sm font-medium text-gray-700 mb-2">
-                    Animation Speed: {animationSpeed}ms
-                  </label>
-                  <input
-                    id="animationSpeedSlider"
-                    type="range"
-                    min="100"
-                    max="1000"
-                    step="25"
-                    value={animationSpeed}
-                    onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value))}
-                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 text-center">
+            Encoded Parts ({encodedParts.length})
+          </h3>
 
           {/* QR Code Display */}
           {qrCodes.length > 0 && (
@@ -535,23 +498,61 @@ export function PSBTEncoder() {
             </div>
           )}
 
-          {/* Parts List */}
-          <div class="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-            {encodedParts.map((part, i) => (
-              <div key={i} class="mb-3 p-3 bg-white rounded border">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="font-medium text-sm text-gray-700">Part {i + 1}</span>
+          {/* Navigation and Animation Controls */}
+          {qrCodes.length > 1 && (
+            <div class="flex flex-col items-center space-y-4">
+              {/* Previous/Next Buttons */}
+              <div class="flex items-center space-x-4">
+                <button
+                  onClick={() => setCurrentQrIndex((prev) => (prev - 1 + qrCodes.length) % qrCodes.length)}
+                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentQrIndex((prev) => (prev + 1) % qrCodes.length)}
+                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Next
+                </button>
+              </div>
+
+              {/* Animation Controls */}
+              <div class="flex flex-col items-center space-y-3">
+                <div class="flex space-x-2">
                   <button
-                    onClick={() => setCurrentQrIndex(i)}
-                    class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200"
+                    onClick={startAnimation}
+                    disabled={isAnimating}
+                    class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
                   >
-                    Show QR
+                    Start Animation
+                  </button>
+                  <button
+                    onClick={stopAnimation}
+                    disabled={!isAnimating}
+                    class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Stop Animation
                   </button>
                 </div>
-                <p class="text-xs text-gray-600 break-all font-mono">{part}</p>
+                <div class="w-64">
+                  <label htmlFor="animationSpeedSlider" class="block text-sm font-medium text-gray-700 mb-2 text-center">
+                    Animation Speed: {animationSpeed}ms
+                  </label>
+                  <input
+                    id="animationSpeedSlider"
+                    type="range"
+                    min="100"
+                    max="1000"
+                    step="25"
+                    value={animationSpeed}
+                    onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value))}
+                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
