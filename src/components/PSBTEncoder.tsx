@@ -173,7 +173,7 @@ export function PSBTEncoder() {
           index,
           value: output.value,
           script: Buffer.from(output.script).toString('hex'),
-          address: calculateAddress(Buffer.from(output.script).toString('hex'), network),
+          address: calculateAddress(Buffer.from(output.script), network),
         })),
       }
       
