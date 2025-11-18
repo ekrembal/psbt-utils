@@ -158,15 +158,14 @@ export function PSBTEncoder() {
         psbtHex: psbtHex,
         inputs: psbt.txInputs.map((input, index) => ({
           inputIndex: index,
-          txid: input.hash.toString('hex'),
+          txid: Buffer.from(input.hash.reverse()).toString('hex'),
           vout: input.index,
           sequence: input.sequence,
-          type: psbt.getInputType(index),
         })),
         outputs: psbt.txOutputs.map((output, index) => ({
           index,
           value: output.value,
-          script: output.script.toString('hex'),
+          script: Buffer.from(output.script).toString('hex'),
         })),
       }
       
@@ -433,10 +432,6 @@ export function PSBTEncoder() {
                       <div class="text-sm font-medium text-gray-700 mb-1">Sequence</div>
                       <div class="text-sm text-gray-600">{input.sequence}</div>
                     </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Type</div>
-                      <div class="text-sm text-gray-600">{input.type || 'Unknown'}</div>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -452,7 +447,9 @@ export function PSBTEncoder() {
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <div class="text-sm font-medium text-gray-700 mb-1">Amount</div>
-                      <div class="text-sm text-gray-600 font-mono">{(output.value / 100000000).toFixed(8)} BTC</div>
+                      <div class="text-sm text-gray-600 font-mono">
+                        {(Number(output.value) / 100000000).toFixed(8)} BTC
+                      </div>
                       <div class="text-xs text-gray-500">{output.value.toLocaleString()} sats</div>
                     </div>
                     <div>

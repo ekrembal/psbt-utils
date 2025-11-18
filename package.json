@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "bitcoinjs-lib": "^6.1.5",
+    "bitcoinjs-lib": "^7.0.0",
     "buffer": "^6.0.3",
     "foundation-ur-py": "https://github.com/ekrembal/foundation-ur-py.git",
     "preact": "^10.27.2",
