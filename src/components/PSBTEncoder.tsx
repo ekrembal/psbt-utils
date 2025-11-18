@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
 import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
 import { Psbt } from 'bitcoinjs-lib'
+import { formatSequenceAsHex, calculateAddress, formatSighashFlag, formatBTC } from '../utils/psbtUtils'
 
 export function PSBTEncoder() {
   const [psbtInput, setPsbtInput] = useState('')
@@ -156,16 +157,23 @@ export function PSBTEncoder() {
         inputCount: psbt.inputCount,
         psbtHash: psbtHash,
         psbtHex: psbtHex,
-        inputs: psbt.txInputs.map((input, index) => ({
-          inputIndex: index,
-          txid: Buffer.from(input.hash.reverse()).toString('hex'),
-          vout: input.index,
-          sequence: input.sequence,
-        })),
+        inputs: psbt.txInputs.map((input, index) => {
+          const inputData = psbt.data.inputs[index]
+          const sighashType = inputData?.sighashType
+          return {
+            inputIndex: index,
+            txid: Buffer.from(input.hash.reverse()).toString('hex'),
+            vout: input.index,
+            sequence: input.sequence,
+            sequenceHex: formatSequenceAsHex(input.sequence ?? 0),
+            sighashFlag: formatSighashFlag(sighashType),
+          }
+        }),
         outputs: psbt.txOutputs.map((output, index) => ({
           index,
           value: output.value,
           script: Buffer.from(output.script).toString('hex'),
+          address: calculateAddress(Buffer.from(output.script).toString('hex'), network),
         })),
       }
       
@@ -413,52 +421,54 @@ export function PSBTEncoder() {
             </div>
           </div>
 
-          {/* Inputs */}
+          {/* Inputs and Outputs Side by Side */}
           <div class="mb-6">
-            <h4 class="font-medium text-gray-900 mb-3">Inputs ({decodedPsbt.inputs.length})</h4>
+            <h4 class="font-medium text-gray-900 mb-3">
+              Inputs ({decodedPsbt.inputs.length}) & Outputs ({decodedPsbt.outputs.length})
+            </h4>
             <div class="space-y-3">
-              {decodedPsbt.inputs.map((input: any, index: number) => (
-                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Transaction ID (TXID)</div>
-                      <div class="text-xs font-mono text-gray-600 break-all">{input.txid}</div>
+              {Array.from({ length: Math.max(decodedPsbt.inputs.length, decodedPsbt.outputs.length) }).map((_, index) => {
+                const input = decodedPsbt.inputs[index]
+                const output = decodedPsbt.outputs[index]
+                return (
+                  <div key={index} class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Input */}
+                    <div class="border border-gray-200 rounded p-3 text-sm">
+                      {input ? (
+                        <div class="space-y-1">
+                          <div class="font-mono text-xs break-all text-gray-700">
+                            {input.txid}:{input.vout}
+                          </div>
+                          <div class="text-xs text-gray-500">
+                            {input.sighashFlag}
+                          </div>
+                        </div>
+                      ) : (
+                        <div class="text-gray-400">-</div>
+                      )}
                     </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Output Index (VOUT)</div>
-                      <div class="text-sm text-gray-600">{input.vout}</div>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Sequence</div>
-                      <div class="text-sm text-gray-600">{input.sequence}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Outputs */}
-          <div>
-            <h4 class="font-medium text-gray-900 mb-3">Outputs ({decodedPsbt.outputs.length})</h4>
-            <div class="space-y-3">
-              {decodedPsbt.outputs.map((output: any, index: number) => (
-                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Amount</div>
-                      <div class="text-sm text-gray-600 font-mono">
-                        {(Number(output.value) / 100000000).toFixed(8)} BTC
-                      </div>
-                      <div class="text-xs text-gray-500">{output.value.toLocaleString()} sats</div>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Output Script</div>
-                      <div class="text-xs font-mono text-gray-600 break-all">{output.script}</div>
+                    {/* Output */}
+                    <div class="border border-gray-200 rounded p-3 text-sm">
+                      {output ? (
+                        <div class="space-y-1">
+                          <div class="font-mono text-xs break-all text-gray-700">
+                            {output.address}
+                          </div>
+                          <div class="font-mono text-xs break-all text-gray-500">
+                            {output.script}
+                          </div>
+                          <div class="text-xs text-gray-700">
+                            {formatBTC(output.value)} BTC
+                          </div>
+                        </div>
+                      ) : (
+                        <div class="text-gray-400">-</div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
