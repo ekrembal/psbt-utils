@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks'
 import QRCode from 'qrcode'
 import { UR, UREncoder, createPSBT, toHex } from 'foundation-ur-py'
 import { Psbt } from 'bitcoinjs-lib'
+import { formatSequenceAsHex, calculateAddress, formatSighashFlag, formatBTC } from '../utils/psbtUtils'
 
 export function PSBTEncoder() {
   const [psbtInput, setPsbtInput] = useState('')
@@ -156,17 +157,23 @@ export function PSBTEncoder() {
         inputCount: psbt.inputCount,
         psbtHash: psbtHash,
         psbtHex: psbtHex,
-        inputs: psbt.txInputs.map((input, index) => ({
-          inputIndex: index,
-          txid: input.hash.toString('hex'),
-          vout: input.index,
-          sequence: input.sequence,
-          type: psbt.getInputType(index),
-        })),
+        inputs: psbt.txInputs.map((input, index) => {
+          const inputData = psbt.data.inputs[index]
+          const sighashType = inputData?.sighashType
+          return {
+            inputIndex: index,
+            txid: Buffer.from(input.hash.reverse()).toString('hex'),
+            vout: input.index,
+            sequence: input.sequence,
+            sequenceHex: formatSequenceAsHex(input.sequence ?? 0),
+            sighashFlag: formatSighashFlag(sighashType),
+          }
+        }),
         outputs: psbt.txOutputs.map((output, index) => ({
           index,
           value: output.value,
-          script: output.script.toString('hex'),
+          script: Buffer.from(output.script).toString('hex'),
+          address: calculateAddress(Buffer.from(output.script), network),
         })),
       }
       
@@ -414,54 +421,54 @@ export function PSBTEncoder() {
             </div>
           </div>
 
-          {/* Inputs */}
+          {/* Inputs and Outputs Side by Side */}
           <div class="mb-6">
-            <h4 class="font-medium text-gray-900 mb-3">Inputs ({decodedPsbt.inputs.length})</h4>
+            <h4 class="font-medium text-gray-900 mb-3">
+              Inputs ({decodedPsbt.inputs.length}) & Outputs ({decodedPsbt.outputs.length})
+            </h4>
             <div class="space-y-3">
-              {decodedPsbt.inputs.map((input: any, index: number) => (
-                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Transaction ID (TXID)</div>
-                      <div class="text-xs font-mono text-gray-600 break-all">{input.txid}</div>
+              {Array.from({ length: Math.max(decodedPsbt.inputs.length, decodedPsbt.outputs.length) }).map((_, index) => {
+                const input = decodedPsbt.inputs[index]
+                const output = decodedPsbt.outputs[index]
+                return (
+                  <div key={index} class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Input */}
+                    <div class="border border-gray-200 rounded p-3 text-sm">
+                      {input ? (
+                        <div class="space-y-1">
+                          <div class="font-mono text-xs break-all text-gray-700">
+                            {input.txid}:{input.vout}
+                          </div>
+                          <div class="text-xs text-gray-500">
+                            {input.sighashFlag}
+                          </div>
+                        </div>
+                      ) : (
+                        <div class="text-gray-400">-</div>
+                      )}
                     </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Output Index (VOUT)</div>
-                      <div class="text-sm text-gray-600">{input.vout}</div>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Sequence</div>
-                      <div class="text-sm text-gray-600">{input.sequence}</div>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Type</div>
-                      <div class="text-sm text-gray-600">{input.type || 'Unknown'}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          {/* Outputs */}
-          <div>
-            <h4 class="font-medium text-gray-900 mb-3">Outputs ({decodedPsbt.outputs.length})</h4>
-            <div class="space-y-3">
-              {decodedPsbt.outputs.map((output: any, index: number) => (
-                <div key={index} class="bg-gray-50 p-4 rounded-lg border">
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Amount</div>
-                      <div class="text-sm text-gray-600 font-mono">{(output.value / 100000000).toFixed(8)} BTC</div>
-                      <div class="text-xs text-gray-500">{output.value.toLocaleString()} sats</div>
-                    </div>
-                    <div>
-                      <div class="text-sm font-medium text-gray-700 mb-1">Output Script</div>
-                      <div class="text-xs font-mono text-gray-600 break-all">{output.script}</div>
+                    {/* Output */}
+                    <div class="border border-gray-200 rounded p-3 text-sm">
+                      {output ? (
+                        <div class="space-y-1">
+                          <div class="font-mono text-xs break-all text-gray-700">
+                            {output.address}
+                          </div>
+                          <div class="font-mono text-xs break-all text-gray-500">
+                            {output.script}
+                          </div>
+                          <div class="text-xs text-gray-700">
+                            {formatBTC(output.value)} BTC
+                          </div>
+                        </div>
+                      ) : (
+                        <div class="text-gray-400">-</div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
@@ -469,46 +476,9 @@ export function PSBTEncoder() {
 
       {encodedParts.length > 0 && (
         <div class="bg-white shadow rounded-lg p-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">
-              Encoded Parts ({encodedParts.length})
-            </h3>
-            {qrCodes.length > 1 && (
-              <div class="space-y-3">
-                <div class="flex space-x-2">
-                  <button
-                    onClick={startAnimation}
-                    disabled={isAnimating}
-                    class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    Start Animation
-                  </button>
-                  <button
-                    onClick={stopAnimation}
-                    disabled={!isAnimating}
-                    class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    Stop Animation
-                  </button>
-                </div>
-                <div class="w-64">
-                  <label htmlFor="animationSpeedSlider" class="block text-sm font-medium text-gray-700 mb-2">
-                    Animation Speed: {animationSpeed}ms
-                  </label>
-                  <input
-                    id="animationSpeedSlider"
-                    type="range"
-                    min="100"
-                    max="1000"
-                    step="25"
-                    value={animationSpeed}
-                    onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value))}
-                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 text-center">
+            Encoded Parts ({encodedParts.length})
+          </h3>
 
           {/* QR Code Display */}
           {qrCodes.length > 0 && (
@@ -528,23 +498,61 @@ export function PSBTEncoder() {
             </div>
           )}
 
-          {/* Parts List */}
-          <div class="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-            {encodedParts.map((part, i) => (
-              <div key={i} class="mb-3 p-3 bg-white rounded border">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="font-medium text-sm text-gray-700">Part {i + 1}</span>
+          {/* Navigation and Animation Controls */}
+          {qrCodes.length > 1 && (
+            <div class="flex flex-col items-center space-y-4">
+              {/* Previous/Next Buttons */}
+              <div class="flex items-center space-x-4">
+                <button
+                  onClick={() => setCurrentQrIndex((prev) => (prev - 1 + qrCodes.length) % qrCodes.length)}
+                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentQrIndex((prev) => (prev + 1) % qrCodes.length)}
+                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Next
+                </button>
+              </div>
+
+              {/* Animation Controls */}
+              <div class="flex flex-col items-center space-y-3">
+                <div class="flex space-x-2">
                   <button
-                    onClick={() => setCurrentQrIndex(i)}
-                    class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200"
+                    onClick={startAnimation}
+                    disabled={isAnimating}
+                    class="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
                   >
-                    Show QR
+                    Start Animation
+                  </button>
+                  <button
+                    onClick={stopAnimation}
+                    disabled={!isAnimating}
+                    class="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Stop Animation
                   </button>
                 </div>
-                <p class="text-xs text-gray-600 break-all font-mono">{part}</p>
+                <div class="w-64">
+                  <label htmlFor="animationSpeedSlider" class="block text-sm font-medium text-gray-700 mb-2 text-center">
+                    Animation Speed: {animationSpeed}ms
+                  </label>
+                  <input
+                    id="animationSpeedSlider"
+                    type="range"
+                    min="100"
+                    max="1000"
+                    step="25"
+                    value={animationSpeed}
+                    onInput={(e) => setAnimationSpeed(parseInt((e.target as HTMLInputElement).value))}
+                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

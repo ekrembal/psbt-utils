@@ -9,13 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "bitcoinjs-lib": "^6.1.5",
+    "bitcoinjs-lib": "^7.0.0",
     "buffer": "^6.0.3",
     "foundation-ur-py": "https://github.com/ekrembal/foundation-ur-py.git",
     "preact": "^10.27.2",
     "process": "^0.11.10",
     "qr-scanner": "^1.4.2",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "tiny-secp256k1": "^2.2.4",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.2",
