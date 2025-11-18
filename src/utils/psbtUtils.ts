@@ -18,7 +18,7 @@ export function formatSequenceAsHex(sequence: number): string {
  * @param network - The network ('bitcoin' or 'testnet4')
  * @returns The address (dummy for now)
  */
-export function calculateAddress(scriptPubkey: string, network: 'bitcoin' | 'testnet4'): string {
+export function calculateAddress(_scriptPubkey: string, _network: 'bitcoin' | 'testnet4'): string {
   // TODO: Implement actual address calculation
   // For now, return a placeholder
   return `[Address calculation pending]`
